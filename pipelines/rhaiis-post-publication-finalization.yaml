@@ -1,0 +1,67 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: rhaiis-post-publication-finalization
+spec:
+  description: Copy Clair reports and notify downstream consumers after RHAIIS publication.
+  params:
+    - name: release
+      type: string
+    - name: releasePlan
+      type: string
+    - name: snapshot
+      type: string
+    - name: target-repo
+      type: string
+      default: ""
+  tasks:
+    - name: copy-clair-scan-results
+      params:
+        - name: release
+          value: $(params.release)
+        - name: snapshot
+          value: $(params.snapshot)
+        - name: target-repo
+          value: $(params.target-repo)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/red-hat-data-services/aipcc-konflux-data
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/copy-clair-scan-results.yaml
+    - name: notify-release
+      params:
+        - name: release
+          value: $(params.release)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/aipcc-cicd/konflux-data
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/notify-rhaiis-release.yaml
+  finally:
+    - name: report-task-statuses
+      params:
+        - name: clair-copy-status
+          value: $(tasks.copy-clair-scan-results.status)
+        - name: notification-status
+          value: $(tasks.notify-release.status)
+        - name: release
+          value: $(params.release)
+        - name: pipeline-run-name
+          value: $(context.pipelineRun.name)
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/aipcc-cicd/konflux-data
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/report-rhaiis-post-publication-finalization-status.yaml
